@@ -16,9 +16,9 @@ const MIDDLE_MCP = 9;
 
 const PINCH_ON = 0.32;
 const PINCH_OFF = 0.45;
-const SMOOTHING = 0.45;
+const SMOOTHING = 0.35; // Buttery smooth interpolation
 
-// Connections for hand skeleton drawing
+// Hand skeleton connections
 const HAND_CONNECTIONS = [
   [0, 1], [1, 2], [2, 3], [3, 4],       // Thumb
   [0, 5], [5, 6], [6, 7], [7, 8],       // Index
@@ -34,13 +34,15 @@ export interface TrackerStatus {
   hands: number;
   mode: GestureMode;
   pinching: boolean;
+  twoHands: boolean;
 }
 
 export interface HandTrackerCallbacks {
   onRotate(deltaTheta: number, deltaPhi: number): void;
   onZoom(factor: number): void;
   onStatus(status: TrackerStatus): void;
-  onHandMove?(x: number, y: number, isPinching: boolean, handIndex: number): void;
+  /** Pass aggregated smooth coordinates (x, y), overall pinch status, and individual hand data */
+  onHandMove?(x: number, y: number, isPinching: boolean, handCount: number): void;
 }
 
 interface Point { x: number; y: number }
@@ -63,7 +65,8 @@ export class HandTracker {
   private prevMode: GestureMode = "idle";
   private prevSpinGrab: Point | null = null;
   private prevZoomDist: number | null = null;
-  private lastStatus: TrackerStatus = { hands: 0, mode: "idle", pinching: false };
+  private smoothedCenter: Point = { x: 0.5, y: 0.5 };
+  private lastStatus: TrackerStatus = { hands: 0, mode: "idle", pinching: false, twoHands: false };
 
   constructor(video: HTMLVideoElement, overlay: HTMLCanvasElement, callbacks: HandTrackerCallbacks) {
     this.video = video;
@@ -84,9 +87,9 @@ export class HandTracker {
       baseOptions: { modelAssetPath: MODEL_URL, delegate: "GPU" as const },
       runningMode: "VIDEO" as const,
       numHands: 2,
-      minHandDetectionConfidence: 0.55,
-      minHandPresenceConfidence: 0.55,
-      minTrackingConfidence: 0.55,
+      minHandDetectionConfidence: 0.5,
+      minHandPresenceConfidence: 0.5,
+      minTrackingConfidence: 0.5,
     };
     try {
       this.landmarker = await HandLandmarker.createFromOptions(fileset, opts);
@@ -114,7 +117,7 @@ export class HandTracker {
     this.prevZoomDist = null;
     const ctx = this.overlay.getContext("2d");
     ctx?.clearRect(0, 0, this.overlay.width, this.overlay.height);
-    this.emitStatus({ hands: 0, mode: "idle", pinching: false });
+    this.emitStatus({ hands: 0, mode: "idle", pinching: false, twoHands: false });
   }
 
   private loop = () => {
@@ -133,6 +136,10 @@ export class HandTracker {
     const pinchedGrabs: Point[] = [];
     const seen = new Set<string>();
     let anyPinching = false;
+
+    let sumX = 0;
+    let sumY = 0;
+    let validHands = 0;
 
     landmarks.forEach((lm, i) => {
       const label = labels[i];
@@ -160,18 +167,31 @@ export class HandTracker {
         y: st.grab.y + (raw.y - st.grab.y) * SMOOTHING,
       };
 
+      sumX += st.grab.x;
+      sumY += st.grab.y;
+      validHands++;
+
       if (st.pinching) {
         pinchedGrabs.push(st.grab);
         anyPinching = true;
-      }
-
-      if (this.callbacks.onHandMove) {
-        this.callbacks.onHandMove(st.grab.x, st.grab.y, st.pinching, i);
       }
     });
 
     for (const key of this.handStates.keys()) {
       if (!seen.has(key)) this.handStates.delete(key);
+    }
+
+    // Smooth overall steer position across active hands
+    if (validHands > 0) {
+      const targetCenterX = sumX / validHands;
+      const targetCenterY = sumY / validHands;
+
+      this.smoothedCenter.x += (targetCenterX - this.smoothedCenter.x) * SMOOTHING;
+      this.smoothedCenter.y += (targetCenterY - this.smoothedCenter.y) * SMOOTHING;
+
+      if (this.callbacks.onHandMove) {
+        this.callbacks.onHandMove(this.smoothedCenter.x, this.smoothedCenter.y, anyPinching, validHands);
+      }
     }
 
     const mode: GestureMode = pinchedGrabs.length >= 2 ? "zoom" : pinchedGrabs.length === 1 ? "spin" : "idle";
@@ -200,11 +220,21 @@ export class HandTracker {
       this.prevZoomDist = d;
     }
 
-    this.emitStatus({ hands: landmarks.length, mode, pinching: anyPinching });
+    this.emitStatus({
+      hands: landmarks.length,
+      mode,
+      pinching: anyPinching,
+      twoHands: landmarks.length >= 2,
+    });
   }
 
   private emitStatus(s: TrackerStatus): void {
-    if (s.hands !== this.lastStatus.hands || s.mode !== this.lastStatus.mode || s.pinching !== this.lastStatus.pinching) {
+    if (
+      s.hands !== this.lastStatus.hands ||
+      s.mode !== this.lastStatus.mode ||
+      s.pinching !== this.lastStatus.pinching ||
+      s.twoHands !== this.lastStatus.twoHands
+    ) {
       this.lastStatus = s;
       this.callbacks.onStatus(s);
     }
@@ -216,15 +246,23 @@ export class HandTracker {
     const { width, height } = this.overlay;
     ctx.clearRect(0, 0, width, height);
 
-    for (const lm of landmarks) {
+    const isDualHand = landmarks.length >= 2;
+
+    landmarks.forEach((lm, handIndex) => {
       const thumb = lm[THUMB_TIP], index = lm[INDEX_TIP];
       const tx = (1 - thumb.x) * width, ty = thumb.y * height;
       const ix = (1 - index.x) * width, iy = index.y * height;
       const handScale = dist(lm[WRIST], lm[MIDDLE_MCP]);
       const pinched = handScale > 1e-6 && dist(thumb, index) / handScale < PINCH_ON;
 
-      // Draw full hand skeleton
-      ctx.strokeStyle = pinched ? "rgba(245, 158, 11, 0.8)" : "rgba(56, 189, 248, 0.6)";
+      // Color scheme for hand 1 vs hand 2
+      const strokeCol = pinched
+        ? "rgba(245, 158, 11, 0.9)"
+        : handIndex === 0
+        ? "rgba(56, 189, 248, 0.75)"
+        : "rgba(192, 132, 252, 0.75)";
+
+      ctx.strokeStyle = strokeCol;
       ctx.lineWidth = pinched ? 2.5 : 1.5;
 
       for (const [startIdx, endIdx] of HAND_CONNECTIONS) {
@@ -235,8 +273,7 @@ export class HandTracker {
         ctx.stroke();
       }
 
-      // Draw Joint points
-      ctx.fillStyle = pinched ? "#f59e0b" : "#38bdf8";
+      ctx.fillStyle = pinched ? "#f59e0b" : handIndex === 0 ? "#38bdf8" : "#c084fc";
       for (const pt of lm) {
         const px = (1 - pt.x) * width, py = pt.y * height;
         ctx.beginPath();
@@ -244,7 +281,6 @@ export class HandTracker {
         ctx.fill();
       }
 
-      // Draw glowing pinch laser reticle
       const cx = (tx + ix) / 2;
       const cy = (ty + iy) / 2;
 
@@ -263,15 +299,15 @@ export class HandTracker {
         ctx.font = "bold 10px monospace";
         ctx.fillStyle = "#ef4444";
         ctx.textAlign = "center";
-        ctx.fillText("FIRING", cx, cy - 18);
+        ctx.fillText(isDualHand ? `FIRING (HAND ${handIndex + 1})` : "FIRING", cx, cy - 18);
       } else {
-        ctx.strokeStyle = "#38bdf8";
+        ctx.strokeStyle = handIndex === 0 ? "#38bdf8" : "#c084fc";
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.arc(cx, cy, 8, 0, Math.PI * 2);
         ctx.stroke();
       }
-    }
+    });
   }
 }
 

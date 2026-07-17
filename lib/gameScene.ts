@@ -10,7 +10,6 @@ export interface GameState {
   gameStarted: boolean;
   highScore: number;
   speed: number;
-  multiplier: number;
 }
 
 export interface GameSceneApi {
@@ -23,14 +22,11 @@ export interface GameSceneApi {
   dispose(): void;
 }
 
-/* ════════════════════════════════════════════════════════════════════
-   HIGH QUALITY PROCEDURAL SYNTHESIZER
-   ════════════════════════════════════════════════════════════════════ */
+/* ── PROCEDURAL SYNTHESIZER ── */
 class AudioSynth {
   private ctx: AudioContext | null = null;
   private muted = false;
-  private bgOsc1: OscillatorNode | null = null;
-  private bgOsc2: OscillatorNode | null = null;
+  private bgOsc: OscillatorNode | null = null;
   private bgGain: GainNode | null = null;
 
   private initCtx() {
@@ -58,19 +54,17 @@ class AudioSynth {
 
     const osc = c.createOscillator();
     const gain = c.createGain();
-
     osc.type = "sawtooth";
-    osc.frequency.setValueAtTime(1100, c.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(180, c.currentTime + 0.14);
+    osc.frequency.setValueAtTime(1200, c.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(200, c.currentTime + 0.12);
 
     gain.gain.setValueAtTime(0.12, c.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.14);
+    gain.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.12);
 
     osc.connect(gain);
     gain.connect(c.destination);
-
     osc.start();
-    osc.stop(c.currentTime + 0.14);
+    osc.stop(c.currentTime + 0.12);
   }
 
   playExplosion() {
@@ -79,7 +73,7 @@ class AudioSynth {
     const c = this.ctx;
     if (!c) return;
 
-    const bufferSize = c.sampleRate * 0.4;
+    const bufferSize = c.sampleRate * 0.35;
     const buffer = c.createBuffer(1, bufferSize, c.sampleRate);
     const data = buffer.getChannelData(0);
 
@@ -96,19 +90,19 @@ class AudioSynth {
 
     const filter = c.createBiquadFilter();
     filter.type = "lowpass";
-    filter.frequency.setValueAtTime(500, c.currentTime);
-    filter.frequency.exponentialRampToValueAtTime(30, c.currentTime + 0.4);
+    filter.frequency.setValueAtTime(600, c.currentTime);
+    filter.frequency.exponentialRampToValueAtTime(30, c.currentTime + 0.35);
 
     const gain = c.createGain();
     gain.gain.setValueAtTime(0.3, c.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.4);
+    gain.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.35);
 
     noise.connect(filter);
     filter.connect(gain);
     gain.connect(c.destination);
 
     noise.start();
-    noise.stop(c.currentTime + 0.4);
+    noise.stop(c.currentTime + 0.35);
   }
 
   playHit() {
@@ -119,23 +113,21 @@ class AudioSynth {
 
     const osc = c.createOscillator();
     const gain = c.createGain();
-
     osc.type = "square";
-    osc.frequency.setValueAtTime(200, c.currentTime);
-    osc.frequency.linearRampToValueAtTime(80, c.currentTime + 0.12);
+    osc.frequency.setValueAtTime(220, c.currentTime);
+    osc.frequency.linearRampToValueAtTime(70, c.currentTime + 0.1);
 
-    gain.gain.setValueAtTime(0.2, c.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.12);
+    gain.gain.setValueAtTime(0.18, c.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.1);
 
     osc.connect(gain);
     gain.connect(c.destination);
-
     osc.start();
-    osc.stop(c.currentTime + 0.12);
+    osc.stop(c.currentTime + 0.1);
   }
 
   startBg() {
-    if (this.muted || this.bgOsc1) return;
+    if (this.muted || this.bgOsc) return;
     this.initCtx();
     const c = this.ctx;
     if (!c) return;
@@ -147,46 +139,46 @@ class AudioSynth {
       const now = c.currentTime;
 
       this.bgGain = c.createGain();
-      this.bgGain.gain.setValueAtTime(0.05, now);
+      this.bgGain.gain.setValueAtTime(0.04, now);
 
-      this.bgOsc1 = c.createOscillator();
-      this.bgOsc1.type = "sawtooth";
+      this.bgOsc = c.createOscillator();
+      this.bgOsc.type = "sawtooth";
 
       for (let i = 0; i < 32; i++) {
         const time = now + i * step;
         const note = bassNotes[Math.floor(i / 2) % bassNotes.length];
-        this.bgOsc1.frequency.setValueAtTime(note, time);
+        this.bgOsc.frequency.setValueAtTime(note, time);
       }
 
       const filter = c.createBiquadFilter();
       filter.type = "lowpass";
-      filter.frequency.setValueAtTime(350, now);
+      filter.frequency.setValueAtTime(400, now);
 
-      this.bgOsc1.connect(filter);
+      this.bgOsc.connect(filter);
       filter.connect(this.bgGain);
       this.bgGain.connect(c.destination);
 
-      this.bgOsc1.start(now);
-      this.bgOsc1.onended = () => {
-        this.bgOsc1 = null;
+      this.bgOsc.start(now);
+      this.bgOsc.onended = () => {
+        this.bgOsc = null;
         if (!this.muted) loop();
       };
-      this.bgOsc1.stop(now + 32 * step);
+      this.bgOsc.stop(now + 32 * step);
     };
     loop();
   }
 
   stopBg() {
     try {
-      this.bgOsc1?.stop();
+      this.bgOsc?.stop();
     } catch {}
-    this.bgOsc1 = null;
+    this.bgOsc = null;
     this.bgGain = null;
   }
 }
 
 /* ════════════════════════════════════════════════════════════════════
-   MAIN THREE.JS GAME SCENE ENGINE
+   MAIN THREE.JS GAME ENGINE
    ════════════════════════════════════════════════════════════════════ */
 export function createGameScene(container: HTMLElement): GameSceneApi {
   const width = container.clientWidth;
@@ -205,7 +197,6 @@ export function createGameScene(container: HTMLElement): GameSceneApi {
     gameStarted: false,
     highScore,
     speed: 1.0,
-    multiplier: 1,
   };
 
   let onStateChangeCb: ((s: GameState) => void) | null = null;
@@ -227,12 +218,11 @@ export function createGameScene(container: HTMLElement): GameSceneApi {
   renderer.toneMappingExposure = 1.25;
   container.appendChild(renderer.domElement);
 
-  // Post processing bloom
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
   const bloomPass = new UnrealBloomPass(
     new THREE.Vector2(width, height),
-    1.8,  // bloom strength
+    1.7,  // bloom strength
     0.4,  // radius
     0.15  // threshold
   );
@@ -250,98 +240,141 @@ export function createGameScene(container: HTMLElement): GameSceneApi {
   rimLight.position.set(-10, -10, -20);
   scene.add(rimLight);
 
-  // Dynamic ship spotlight
-  const shipLight = new THREE.PointLight(0x06b6d4, 3.0, 15);
+  const shipLight = new THREE.PointLight(0x06b6d4, 3.5, 18);
   scene.add(shipLight);
 
-  // ——— SLEEK HIGH-TECH SPACESHIP BUILD ———
+  // ——— PRACTICAL SUPERSONIC COMBAT FIGHTER AIRCRAFT ———
   const ship = new THREE.Group();
   scene.add(ship);
 
-  // Main fuselage (aerodynamic sleek jet core)
-  const fuselageGeom = new THREE.ConeGeometry(0.45, 2.2, 5);
-  fuselageGeom.rotateX(Math.PI / 2);
-  const fuselageMat = new THREE.MeshStandardMaterial({
+  // Main Tapered Fuselage
+  const noseGeom = new THREE.ConeGeometry(0.35, 1.8, 6);
+  noseGeom.rotateX(Math.PI / 2);
+  const darkMetalMat = new THREE.MeshStandardMaterial({
     color: 0x0f172a,
     emissive: 0x0284c7,
-    emissiveIntensity: 0.4,
-    metalness: 0.9,
+    emissiveIntensity: 0.35,
+    metalness: 0.95,
     roughness: 0.15,
   });
-  const fuselage = new THREE.Mesh(fuselageGeom, fuselageMat);
-  ship.add(fuselage);
+  const nose = new THREE.Mesh(noseGeom, darkMetalMat);
+  ship.add(nose);
 
-  // Glowing cockpit canopy glass
-  const canopyGeom = new THREE.SphereGeometry(0.24, 16, 16);
-  canopyGeom.scale(0.8, 0.6, 2.2);
+  // Rear Jet Body Core
+  const coreBodyGeom = new THREE.BoxGeometry(0.7, 0.4, 1.2);
+  const coreBody = new THREE.Mesh(coreBodyGeom, darkMetalMat);
+  coreBody.position.set(0, 0, 0.4);
+  ship.add(coreBody);
+
+  // Dual Tinted Glass Canopy
+  const canopyGeom = new THREE.SphereGeometry(0.22, 16, 16);
+  canopyGeom.scale(0.75, 0.55, 2.2);
   const canopyMat = new THREE.MeshStandardMaterial({
     color: 0x38bdf8,
     emissive: 0x06b6d4,
-    emissiveIntensity: 0.9,
-    roughness: 0.1,
+    emissiveIntensity: 1.0,
     metalness: 0.9,
+    roughness: 0.05,
   });
   const canopy = new THREE.Mesh(canopyGeom, canopyMat);
-  canopy.position.set(0, 0.18, -0.3);
+  canopy.position.set(0, 0.16, -0.2);
   ship.add(canopy);
 
-  // Swept wings (left & right)
-  const wingGeom = new THREE.BoxGeometry(1.6, 0.06, 0.9);
-  wingGeom.rotateY(-Math.PI / 8);
+  // Swept Dual Forward Tactical Wings
+  const wingShape = new THREE.Shape();
+  wingShape.moveTo(0, 0);
+  wingShape.lineTo(1.8, -0.4);
+  wingShape.lineTo(1.6, -1.1);
+  wingShape.lineTo(0, -0.7);
+  wingShape.closePath();
+
+  const extrudeOpts = { depth: 0.06, bevelEnabled: true, bevelThickness: 0.02, bevelSize: 0.02 };
+  const wingGeom = new THREE.ExtrudeGeometry(wingShape, extrudeOpts);
+  wingGeom.rotateX(Math.PI / 2);
+
   const wingMat = new THREE.MeshStandardMaterial({
     color: 0x1e293b,
     emissive: 0x0369a1,
-    emissiveIntensity: 0.3,
+    emissiveIntensity: 0.4,
     metalness: 0.85,
     roughness: 0.2,
   });
 
   const leftWing = new THREE.Mesh(wingGeom, wingMat);
-  leftWing.position.set(-0.95, -0.05, 0.2);
+  leftWing.position.set(-0.2, 0, 0.2);
   ship.add(leftWing);
 
   const rightWing = new THREE.Mesh(wingGeom, wingMat);
-  rightWing.position.set(0.95, -0.05, 0.2);
+  rightWing.scale.set(-1, 1, 1);
+  rightWing.position.set(0.2, 0, 0.2);
   ship.add(rightWing);
 
-  // Glowing Wing-tip laser cannons
-  const cannonGeom = new THREE.CylinderGeometry(0.06, 0.06, 0.8, 8);
+  // Vertical Tail Stabilizers
+  for (const sx of [-0.3, 0.3]) {
+    const tailGeom = new THREE.BoxGeometry(0.05, 0.5, 0.6);
+    tailGeom.rotateX(Math.PI / 6);
+    const tail = new THREE.Mesh(tailGeom, darkMetalMat);
+    tail.position.set(sx, 0.3, 0.8);
+    ship.add(tail);
+  }
+
+  // Double Wingtip Plasma Cannons
+  const cannonGeom = new THREE.CylinderGeometry(0.05, 0.05, 0.9, 8);
   cannonGeom.rotateX(Math.PI / 2);
   const cannonMat = new THREE.MeshStandardMaterial({
     color: 0x38bdf8,
     emissive: 0x38bdf8,
-    emissiveIntensity: 1.5,
+    emissiveIntensity: 1.8,
   });
 
-  const leftCannon = new THREE.Mesh(cannonGeom, cannonMat);
-  leftCannon.position.set(-1.6, 0, -0.3);
-  ship.add(leftCannon);
+  for (const sx of [-1.75, 1.75]) {
+    const cannon = new THREE.Mesh(cannonGeom, cannonMat);
+    cannon.position.set(sx, -0.02, -0.2);
+    ship.add(cannon);
+  }
 
-  const rightCannon = new THREE.Mesh(cannonGeom, cannonMat);
-  rightCannon.position.set(1.6, 0, -0.3);
-  ship.add(rightCannon);
-
-  // Dual glowing plasma thrusters
-  const thrusterGeom = new THREE.ConeGeometry(0.18, 0.8, 12);
+  // Quad Glowing Thruster Nozzles
+  const thrusterGeom = new THREE.ConeGeometry(0.14, 0.7, 12);
   thrusterGeom.rotateX(-Math.PI / 2);
-  const thrusterMat = new THREE.MeshBasicMaterial({
+  const thrusterMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
+
+  const thrusters: THREE.Mesh[] = [];
+  for (const sx of [-0.22, 0.22]) {
+    const tMesh = new THREE.Mesh(thrusterGeom, thrusterMat);
+    tMesh.position.set(sx, 0, 1.05);
+    ship.add(tMesh);
+    thrusters.push(tMesh);
+  }
+
+  // Engine Exhaust Particle Trail
+  const EXHAUST_COUNT = 80;
+  const exhaustGeom = new THREE.BufferGeometry();
+  const exhaustPos = new Float32Array(EXHAUST_COUNT * 3);
+  const exhaustVels = new Float32Array(EXHAUST_COUNT * 3);
+  const exhaustLife = new Float32Array(EXHAUST_COUNT);
+
+  for (let i = 0; i < EXHAUST_COUNT; i++) {
+    exhaustPos[i * 3 + 2] = 100; // Offscreen initially
+    exhaustLife[i] = 0;
+  }
+  exhaustGeom.setAttribute("position", new THREE.BufferAttribute(exhaustPos, 3));
+
+  const exhaustMat = new THREE.PointsMaterial({
     color: 0x38bdf8,
+    size: 0.14,
+    transparent: true,
+    opacity: 0.8,
+    blending: THREE.AdditiveBlending,
   });
+  const exhaustSystem = new THREE.Points(exhaustGeom, exhaustMat);
+  scene.add(exhaustSystem);
+  let exhaustIndex = 0;
 
-  const leftThruster = new THREE.Mesh(thrusterGeom, thrusterMat);
-  leftThruster.position.set(-0.3, 0, 1.2);
-  ship.add(leftThruster);
-
-  const rightThruster = new THREE.Mesh(thrusterGeom, thrusterMat);
-  rightThruster.position.set(0.3, 0, 1.2);
-  ship.add(rightThruster);
-
-  // Player position targets & play area limits
   const targetPos = new THREE.Vector2(0, 0);
   const PLAY_AREA_W = 5.2;
   const PLAY_AREA_H = 3.6;
 
-  // ——— STARFIELD BACKGROUND (2000 MULTI-COLORED PARTICLES) ———
+  // ——— MULTI-COLORED STARFIELD BACKGROUND ———
   const STAR_COUNT = 1800;
   const starGeom = new THREE.BufferGeometry();
   const starPositions = new Float32Array(STAR_COUNT * 3);
@@ -427,16 +460,12 @@ export function createGameScene(container: HTMLElement): GameSceneApi {
   function createLaserBulletMesh(): THREE.Group {
     const group = new THREE.Group();
 
-    // Core laser cylinder (cyan / white glowing beam)
     const coreGeom = new THREE.CylinderGeometry(0.08, 0.08, 1.4, 8);
     coreGeom.rotateX(Math.PI / 2);
-    const coreMat = new THREE.MeshBasicMaterial({
-      color: 0xffffff,
-    });
+    const coreMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
     const core = new THREE.Mesh(coreGeom, coreMat);
     group.add(core);
 
-    // Glowing outer halo beam
     const haloGeom = new THREE.CylinderGeometry(0.18, 0.18, 1.5, 8);
     haloGeom.rotateX(Math.PI / 2);
     const haloMat = new THREE.MeshBasicMaterial({
@@ -464,7 +493,6 @@ export function createGameScene(container: HTMLElement): GameSceneApi {
     }
     geom.computeVertexNormals();
 
-    // Solid dark rocky asteroid body
     const bodyMat = new THREE.MeshStandardMaterial({
       color: 0x1e1b4b,
       roughness: 0.8,
@@ -473,7 +501,6 @@ export function createGameScene(container: HTMLElement): GameSceneApi {
     const body = new THREE.Mesh(geom, bodyMat);
     group.add(body);
 
-    // Glowing magma veins / wireframe outline (HIGH VISIBILITY)
     const wireMat = new THREE.MeshBasicMaterial({
       color: 0xf43f5e,
       wireframe: true,
@@ -482,18 +509,16 @@ export function createGameScene(container: HTMLElement): GameSceneApi {
     wire.scale.setScalar(1.02);
     group.add(wire);
 
-    // Glowing core point light for visibility in dark space
     const light = new THREE.PointLight(0xf43f5e, 2.0, 6);
     group.add(light);
 
     return group;
   }
 
-  // Create Cyber Defense Mine (High visibility obstacle type 2)
+  // Create Cyber Defense Mine
   function createCyberMineMesh(radius: number): THREE.Group {
     const group = new THREE.Group();
 
-    // Mine sphere body
     const sphereGeom = new THREE.SphereGeometry(radius * 0.75, 12, 12);
     const sphereMat = new THREE.MeshStandardMaterial({
       color: 0x0284c7,
@@ -505,7 +530,6 @@ export function createGameScene(container: HTMLElement): GameSceneApi {
     const sphere = new THREE.Mesh(sphereGeom, sphereMat);
     group.add(sphere);
 
-    // Spikes protruding out
     const spikeCount = 6;
     for (let i = 0; i < spikeCount; i++) {
       const spikeGeom = new THREE.ConeGeometry(0.12, radius * 1.6, 6);
@@ -519,7 +543,6 @@ export function createGameScene(container: HTMLElement): GameSceneApi {
       group.add(spike);
     }
 
-    // Outer warning aura ring
     const auraGeom = new THREE.RingGeometry(radius * 1.1, radius * 1.25, 24);
     const auraMat = new THREE.MeshBasicMaterial({
       color: 0xf59e0b,
@@ -537,7 +560,6 @@ export function createGameScene(container: HTMLElement): GameSceneApi {
     return group;
   }
 
-  // Spawn Obstacles into the scene
   function spawnObstacle() {
     const radius = 0.55 + Math.random() * 0.65;
     const isMine = Math.random() < 0.4;
@@ -560,7 +582,6 @@ export function createGameScene(container: HTMLElement): GameSceneApi {
     });
   }
 
-  // Spawn Dramatic Particle Explosions
   function spawnExplosion(pos: THREE.Vector3, colorHex: number, scale = 1.0) {
     const particleCount = Math.floor(45 * scale);
     const geom = new THREE.BufferGeometry();
@@ -600,14 +621,12 @@ export function createGameScene(container: HTMLElement): GameSceneApi {
     });
   }
 
-  // Fire Weapon Logic
   let shootCooldown = 0;
   function triggerShoot() {
     if (!state.gameStarted || state.gameOver || shootCooldown > 0) return;
     synth.playLaser();
 
-    // Twin lasers from left and right cannons
-    for (const offset of [-1.6, 1.6]) {
+    for (const offset of [-1.75, 1.75]) {
       const bullet = createLaserBulletMesh();
       bullet.position.copy(ship.position);
       bullet.position.x += offset;
@@ -623,7 +642,6 @@ export function createGameScene(container: HTMLElement): GameSceneApi {
     shootCooldown = 8;
   }
 
-  // Damage Player
   let cameraShake = 0;
   function takeDamage(amount: number) {
     state.health = Math.max(0, state.health - amount);
@@ -661,23 +679,50 @@ export function createGameScene(container: HTMLElement): GameSceneApi {
     rafId = requestAnimationFrame(renderLoop);
     time += 0.015;
 
-    // Smooth Ship Motion & Tilt Interpolation
     if (!state.gameOver) {
-      ship.position.x += (targetPos.x - ship.position.x) * 0.14;
-      ship.position.y += (targetPos.y - ship.position.y) * 0.14;
+      ship.position.x += (targetPos.x - ship.position.x) * 0.16;
+      ship.position.y += (targetPos.y - ship.position.y) * 0.16;
 
       const deltaX = targetPos.x - ship.position.x;
-      ship.rotation.z = -deltaX * 0.35;
-      ship.rotation.y = deltaX * 0.15;
+      ship.rotation.z = -deltaX * 0.38;
+      ship.rotation.y = deltaX * 0.16;
       ship.rotation.x = Math.sin(time * 3) * 0.04;
 
       shipLight.position.copy(ship.position);
 
-      leftThruster.scale.set(1, 1, 1 + Math.sin(time * 40) * 0.25);
-      rightThruster.scale.set(1, 1, 1 + Math.cos(time * 40) * 0.25);
+      thrusters.forEach((t) => {
+        t.scale.set(1, 1, 1 + Math.sin(time * 40) * 0.25);
+      });
+
+      // Spawn Engine Exhaust Particles
+      for (let e = 0; e < 2; e++) {
+        const idx = exhaustIndex % EXHAUST_COUNT;
+        exhaustPos[idx * 3] = ship.position.x + (Math.random() - 0.5) * 0.2;
+        exhaustPos[idx * 3 + 1] = ship.position.y + (Math.random() - 0.5) * 0.1;
+        exhaustPos[idx * 3 + 2] = ship.position.z + 1.1;
+
+        exhaustVels[idx * 3] = (Math.random() - 0.5) * 0.02;
+        exhaustVels[idx * 3 + 1] = (Math.random() - 0.5) * 0.02;
+        exhaustVels[idx * 3 + 2] = 0.08 + Math.random() * 0.06;
+
+        exhaustLife[idx] = 18;
+        exhaustIndex++;
+      }
     }
 
-    // Camera Shake Effect on Hit
+    // Update Engine Particles
+    for (let i = 0; i < EXHAUST_COUNT; i++) {
+      if (exhaustLife[i] > 0) {
+        exhaustPos[i * 3] += exhaustVels[i * 3];
+        exhaustPos[i * 3 + 1] += exhaustVels[i * 3 + 1];
+        exhaustPos[i * 3 + 2] += exhaustVels[i * 3 + 2];
+        exhaustLife[i]--;
+        if (exhaustLife[i] <= 0) exhaustPos[i * 3 + 2] = 100;
+      }
+    }
+    exhaustGeom.attributes.position.needsUpdate = true;
+
+    // Camera Shake Effect
     if (cameraShake > 0) {
       camera.position.x = (Math.random() - 0.5) * cameraShake;
       camera.position.y = (Math.random() - 0.5) * cameraShake;
@@ -688,7 +733,7 @@ export function createGameScene(container: HTMLElement): GameSceneApi {
       }
     }
 
-    // Move Starfield Background
+    // Starfield Movement
     const starArr = starGeom.attributes.position.array as Float32Array;
     for (let i = 0; i < STAR_COUNT; i++) {
       starArr[i * 3 + 2] += starSpeeds[i] * 0.15;
@@ -700,18 +745,17 @@ export function createGameScene(container: HTMLElement): GameSceneApi {
     }
     starGeom.attributes.position.needsUpdate = true;
 
-    // Move Cyber Tunnel Rings
+    // Cyber Rings Movement
     for (let i = 0; i < RING_COUNT; i++) {
       rings[i].position.z += 0.15;
       rings[i].rotation.z += 0.002 * (i % 2 === 0 ? 1 : -1);
       if (rings[i].position.z > 10) rings[i].position.z = -150;
     }
 
-    // Active Game Logic
+    // Active Gameplay Loop
     if (state.gameStarted && !state.gameOver) {
       if (shootCooldown > 0) shootCooldown--;
 
-      // Spawn Obstacles Periodically
       spawnTimer++;
       if (spawnTimer > Math.max(18, 36 - Math.floor(state.score / 150))) {
         spawnObstacle();
@@ -722,7 +766,6 @@ export function createGameScene(container: HTMLElement): GameSceneApi {
       for (let i = projectiles.length - 1; i >= 0; i--) {
         const p = projectiles[i];
         p.mesh.position.add(p.velocity);
-
         if (p.mesh.position.z < -160) {
           scene.remove(p.mesh);
           projectiles.splice(i, 1);
@@ -736,7 +779,6 @@ export function createGameScene(container: HTMLElement): GameSceneApi {
         obs.mesh.rotation.x += obs.rotX;
         obs.mesh.rotation.y += obs.rotY;
 
-        // Obstacle vs Player Ship Collision
         if (Math.abs(obs.mesh.position.z - ship.position.z) < 1.2) {
           const distToShip = Math.hypot(
             obs.mesh.position.x - ship.position.x,
@@ -751,14 +793,12 @@ export function createGameScene(container: HTMLElement): GameSceneApi {
           }
         }
 
-        // Obstacle Passed Player
         if (obs.mesh.position.z > 12) {
           scene.remove(obs.mesh);
           obstacles.splice(i, 1);
           continue;
         }
 
-        // Projectile vs Obstacle Collisions
         for (let j = projectiles.length - 1; j >= 0; j--) {
           const p = projectiles[j];
           if (obs.mesh.position.distanceTo(p.mesh.position) < obs.radius + 0.35) {
@@ -779,7 +819,7 @@ export function createGameScene(container: HTMLElement): GameSceneApi {
       }
     }
 
-    // Update Explosion Particles
+    // Update Particle Explosions
     for (let i = explosions.length - 1; i >= 0; i--) {
       const exp = explosions[i];
       exp.life++;
@@ -815,7 +855,6 @@ export function createGameScene(container: HTMLElement): GameSceneApi {
   window.addEventListener("resize", handleResize);
   renderLoop();
 
-  // Public API Methods
   return {
     moveShip(x: number, y: number) {
       targetPos.x = (x - 0.5) * PLAY_AREA_W * 2;

@@ -14,7 +14,12 @@ export default function SpaceShooter() {
   const trackerRef = useRef<HandTracker | null>(null);
 
   const [cameraState, setCameraState] = useState<CameraState>("off");
-  const [trackerStatus, setTrackerStatus] = useState<TrackerStatus>({ hands: 0, mode: "idle", pinching: false });
+  const [trackerStatus, setTrackerStatus] = useState<TrackerStatus>({
+    hands: 0,
+    mode: "idle",
+    pinching: false,
+    twoHands: false,
+  });
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isMuted, setIsMuted] = useState(false);
 
@@ -25,13 +30,12 @@ export default function SpaceShooter() {
     gameStarted: false,
     highScore: 0,
     speed: 1.0,
-    multiplier: 1,
   });
 
   const mousePosRef = useRef({ x: 0.5, y: 0.5 });
   const keysPressedRef = useRef<Record<string, boolean>>({});
 
-  // ——— INITIALIZE 3D THREE.JS SCENE ———
+  // ——— INITIALIZE THREE.JS SCENE ———
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -52,7 +56,7 @@ export default function SpaceShooter() {
     trackerRef.current?.stop();
     trackerRef.current = null;
     setCameraState("off");
-    setTrackerStatus({ hands: 0, mode: "idle", pinching: false });
+    setTrackerStatus({ hands: 0, mode: "idle", pinching: false, twoHands: false });
   }, []);
 
   const startGestures = useCallback(async () => {
@@ -67,7 +71,7 @@ export default function SpaceShooter() {
       onRotate: () => {},
       onZoom: () => {},
       onStatus: setTrackerStatus,
-      onHandMove: (x, y, isPinching) => {
+      onHandMove: (x, y, isPinching, handCount) => {
         const api = sceneApiRef.current;
         if (!api) return;
         api.moveShip(x, y);
@@ -225,7 +229,7 @@ export default function SpaceShooter() {
         )}
       </header>
 
-      {/* PROMINENT WEBCAM GESTURE PREVIEW WINDOW (Top Right) */}
+      {/* PROMINENT WEBCAM GESTURE PREVIEW WINDOW (POSITIONED AT BOTTOM RIGHT) */}
       <div className={`gesture-cam-widget ${isCamActive ? "cam-active" : ""}`}>
         <div className="widget-header">
           <span className="dot-indicator" />
@@ -242,12 +246,12 @@ export default function SpaceShooter() {
 
         <div className="cam-feed-container">
           <video ref={videoRef} muted playsInline className="cam-video-element" />
-          <canvas ref={overlayRef} width={240} height={180} className="cam-overlay-element" />
+          <canvas ref={overlayRef} width={230} height={170} className="cam-overlay-element" />
 
           {!isCamActive && (
             <div className="cam-placeholder">
               <span className="cam-icon">📷</span>
-              <p className="placeholder-text">Click "ENABLE CAMERA" to steer with hand gestures</p>
+              <p className="placeholder-text">Click "ENABLE CAMERA" to steer with dual hand gestures</p>
             </div>
           )}
         </div>
@@ -255,7 +259,7 @@ export default function SpaceShooter() {
         {isCamActive && (
           <div className="cam-status-bar">
             <span className="status-item">
-              HANDS: <strong>{trackerStatus.hands}</strong>
+              HANDS: <strong>{trackerStatus.hands} {trackerStatus.twoHands ? "(DUAL 👐)" : ""}</strong>
             </span>
             <span className="status-item">
               ACTION:{" "}
@@ -291,15 +295,15 @@ export default function SpaceShooter() {
           <div className="cyber-modal-card">
             <div className="modal-header">
               <h1 className="cyber-title">NEON STRIKE 3D</h1>
-              <p className="cyber-subtitle">NEXT-GEN GESTURE CONTROLLED ARCADE SHOOTER</p>
+              <p className="cyber-subtitle">ULTRA-SMOOTH DUAL GESTURE ARCADE SHOOTER</p>
             </div>
 
             <div className="instructions-grid">
               <div className="instruct-column">
-                <h3>🖐️ WEBCAM GESTURE CONTROLS</h3>
+                <h3>👐 DUAL WEBCAM GESTURE CONTROLS</h3>
                 <ul>
-                  <li>Hold your hand in front of the camera to <strong>Steer Ship</strong>.</li>
-                  <li>Pinch thumb & index finger together to <strong>Fire Plasma Lasers</strong>.</li>
+                  <li>Hold one or <strong>both hands</strong> in front of the camera to <strong>Steer Ship</strong>.</li>
+                  <li>Pinch thumb & index finger on either hand to <strong>Fire Plasma Lasers</strong>.</li>
                 </ul>
               </div>
 
@@ -357,12 +361,12 @@ export default function SpaceShooter() {
         </div>
       )}
 
-      {/* Bottom Floating Control Bar */}
+      {/* Bottom Floating Control Hints */}
       <footer className="hud-bottom-bar">
         <div className="hud-hints">
           {isCamActive ? (
             <span>
-              <kbd>HAND</kbd> Steer &nbsp;|&nbsp; <kbd>PINCH</kbd> Fire Lasers
+              <kbd>DUAL HANDS</kbd> Steer &nbsp;|&nbsp; <kbd>PINCH</kbd> Fire Lasers
             </span>
           ) : (
             <span>
@@ -468,14 +472,14 @@ export default function SpaceShooter() {
           text-shadow: 0 0 10px rgba(245, 158, 11, 0.6);
         }
 
-        /* PROMINENT WEBCAM GESTURE PREVIEW WINDOW (Top Right) */
+        /* PROMINENT WEBCAM GESTURE PREVIEW WINDOW (PLACED AT BOTTOM RIGHT) */
         .gesture-cam-widget {
           position: fixed;
-          top: 90px;
+          bottom: 75px;
           right: 28px;
           z-index: 30;
-          width: 260px;
-          background: rgba(15, 23, 42, 0.85);
+          width: 250px;
+          background: rgba(15, 23, 42, 0.88);
           border: 1px solid rgba(56, 189, 248, 0.4);
           border-radius: 8px;
           padding: 10px;
@@ -537,8 +541,8 @@ export default function SpaceShooter() {
 
         .cam-feed-container {
           position: relative;
-          width: 240px;
-          height: 180px;
+          width: 230px;
+          height: 170px;
           background: #020617;
           border-radius: 6px;
           overflow: hidden;
@@ -574,21 +578,21 @@ export default function SpaceShooter() {
         }
 
         .cam-icon {
-          font-size: 28px;
-          margin-bottom: 8px;
+          font-size: 26px;
+          margin-bottom: 6px;
         }
 
         .placeholder-text {
-          font-size: 10px;
+          font-size: 9px;
           color: #94a3b8;
-          line-height: 1.5;
+          line-height: 1.4;
         }
 
         .cam-status-bar {
           display: flex;
           justify-content: space-between;
           margin-top: 8px;
-          font-size: 10px;
+          font-size: 9px;
           color: #94a3b8;
         }
 
@@ -610,7 +614,7 @@ export default function SpaceShooter() {
         /* Health Bar */
         .hud-health-container {
           position: fixed;
-          bottom: 70px;
+          bottom: 25px;
           left: 50%;
           transform: translateX(-50%);
           z-index: 25;
@@ -803,7 +807,7 @@ export default function SpaceShooter() {
           position: fixed;
           bottom: 20px;
           left: 28px;
-          right: 28px;
+          right: 300px;
           display: flex;
           justify-content: space-between;
           align-items: center;
